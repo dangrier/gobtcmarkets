@@ -103,3 +103,18 @@ func (c *Client) AccountTradingFee(instrument Instrument, currency Currency) (Ac
 
 	return trafee, nil
 }
+
+type AccountBalanceData struct {
+	Currency Currency    `json:"currency"`
+	Balance  AmountWhole `json:"balance"`
+	Pending  AmountWhole `json:"pendingFunds"`
+}
+
+func (abd *AccountBalanceData) String() string {
+	return fmt.Sprintf("%s: %f", abd.Currency, abd.Balance.ToAmountDecimal())
+}
+
+type AccountTradingFeeData struct {
+	TradingFee   AmountWhole `json:"tradingFeeRate"`
+	Volume30Days AmountWhole `json:"volume30Day"`
+}

@@ -11,8 +11,11 @@ type rateLimit struct {
 	throttle chan *time.Time
 }
 
-// Start creates starts a rate limiter with a supplied rate limit (duration)
+// Start starts a rate limiter with a supplied rate limit (duration)
 // and allowing a provided burst of actions.
+//
+// The burst actions are not available until they have built up, to prevent
+// over-spending of available rate limiting space.
 func (l *rateLimit) Start(rate time.Duration, burst int) error {
 	(*l).tick = time.NewTicker(rate)
 

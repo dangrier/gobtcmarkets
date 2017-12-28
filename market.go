@@ -1,6 +1,7 @@
 package btcmarkets
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -104,4 +105,45 @@ func (c *Client) MarketTrades(instrument Instrument, currency Currency, since in
 	}
 
 	return mtd, nil
+}
+
+type MarketTickData struct {
+	Bid        AmountDecimal `json:"bestBid"`
+	Ask        AmountDecimal `json:"bestAsk"`
+	Last       AmountDecimal `json:"lastPrice"`
+	Currency   Currency      `json:"currency"`
+	Instrument Instrument    `json:"instrument"`
+	Timestamp  int64         `json:"timestamp"`
+	Volume     float64       `json:"volume24h"`
+}
+
+type MarketOrderbookData struct {
+	Bids       [][]float64 `json:"bids"`
+	Asks       [][]float64 `json:"asks"`
+	Currency   Currency    `json:"currency"`
+	Instrument Instrument  `json:"instrument"`
+	Timestamp  int64       `json:"timestamp"`
+}
+
+type MarketTradesData []TradeData
+
+func (td *MarketTradesData) Describe() string {
+	var buff bytes.Buffer
+	for _, el := range *td {
+		buff.WriteString(fmt.Sprintf("%s\n", el.String()))
+	}
+	return buff.String()
+}
+
+type TradeID int64
+
+type TradeData struct {
+	TradeID   TradeID       `json:"tid"`
+	Amount    AmountDecimal `json:"amount"`
+	Price     AmountDecimal `json:"price"`
+	Timestamp int64         `json:"date"`
+}
+
+func (td *TradeData) String() string {
+	return fmt.Sprintf("Trade %d: %f - %f at %f", td.TradeID, td.Amount*td.Price, td.Amount, td.Price)
 }
