@@ -1,5 +1,7 @@
 package btcmarkets
 
+import "math"
+
 // APILocation is the protocol, and domain of the API to connect to. As this is
 // currently fixed, there is no reason to provide adjustment of this value.
 const APILocation = "https://api.btcmarkets.net"
@@ -16,6 +18,10 @@ func (amount AmountDecimal) ToAmountWhole() AmountWhole {
 	return AmountWhole(amount * 100000000)
 }
 
+func (amount AmountDecimal) TrimCurrency() AmountDecimal {
+	return amount - AmountDecimal(math.Mod(float64(amount), 1))
+}
+
 // AmountWhole is an integer type which represents the API numbers returned
 // which can have decimal places.
 //
@@ -25,7 +31,7 @@ type AmountWhole int64
 // ToAmountDecimal converts from AmountWhole to AmountDecimal
 // by division by 100000000 (used by API)
 func (amount AmountWhole) ToAmountDecimal() AmountDecimal {
-	return AmountDecimal(amount / 100000000)
+	return AmountDecimal(amount) / AmountDecimal(100000000)
 }
 
 // Currency represents the name of a real-world or crypto currency

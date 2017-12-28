@@ -18,10 +18,10 @@ Endpoints:
 */
 
 // AccountBalance implements the /account/balance endpoint.
-func (c *Client) AccountBalance() ([]AccountBalanceData, error) {
+func (c *Client) AccountBalance() (AccountBalances, error) {
 	err := c.Limit10()
 	if err != nil {
-		return []AccountBalanceData{}, errors.New("error conducting rate limiting: " + err.Error())
+		return AccountBalances{}, errors.New("error conducting rate limiting: " + err.Error())
 	}
 	ts := time.Now()
 	signature := c.messageSignature("/account/balance", ts, "")
@@ -29,7 +29,7 @@ func (c *Client) AccountBalance() ([]AccountBalanceData, error) {
 	req, err := http.NewRequest("GET", fmt.Sprintf("%s/account/balance", APILocation), nil)
 	if err != nil {
 		fmt.Println("error creating account balance request: " + err.Error())
-		return []AccountBalanceData{}, errors.New("error creating account balance request: " + err.Error())
+		return AccountBalances{}, errors.New("error creating account balance request: " + err.Error())
 	}
 
 	req.Header.Set("Accept", "application/json")
@@ -42,19 +42,19 @@ func (c *Client) AccountBalance() ([]AccountBalanceData, error) {
 	res, err := netHTTPClient.Do(req)
 	if err != nil {
 		fmt.Println("error receiving account balance response: " + err.Error())
-		return []AccountBalanceData{}, errors.New("error receiving account balance response: " + err.Error())
+		return AccountBalances{}, errors.New("error receiving account balance response: " + err.Error())
 	}
 	defer res.Body.Close()
 
 	body, err := ioutil.ReadAll(res.Body)
 	if err != nil {
-		return []AccountBalanceData{}, errors.New("error reading account balance response body: " + err.Error())
+		return AccountBalances{}, errors.New("error reading account balance response body: " + err.Error())
 	}
 
-	var accbal []AccountBalanceData
+	var accbal AccountBalances
 	err = json.Unmarshal(body, &accbal)
 	if err != nil {
-		return []AccountBalanceData{}, errors.New("error unmarshalling account balance body: " + err.Error())
+		return AccountBalances{}, errors.New("error unmarshalling account balance body: " + err.Error())
 	}
 
 	return accbal, nil
@@ -102,6 +102,18 @@ func (c *Client) AccountTradingFee(instrument Instrument, currency Currency) (Ac
 	}
 
 	return trafee, nil
+}
+
+type AccountBalances []AccountBalanceData
+
+func (a AccountBalances) GetBalance(currency Currency) AmountWhole {
+	for _, b := range a {
+		if b.Currency == currency {
+			return b.Balance
+		}
+	}
+
+	return AmountWhole(0)
 }
 
 type AccountBalanceData struct {

@@ -58,7 +58,6 @@ func (c *Client) OrderCreate(currency Currency, instrument Instrument, price Amo
 	// characters in the request body (results in an auth error)
 	jreqObject, err := json.Marshal(reqObject)
 	if err != nil {
-		fmt.Println("error creating order object: " + err.Error())
 		return OrderCreateData{}, errors.New("couldn't create object: " + err.Error())
 	}
 	sreqObject := string(jreqObject)
@@ -69,7 +68,6 @@ func (c *Client) OrderCreate(currency Currency, instrument Instrument, price Amo
 
 	req, err := http.NewRequest("POST", fmt.Sprintf("%s/order/create", APILocation), reader)
 	if err != nil {
-		fmt.Println("error creating order request: " + err.Error())
 		return OrderCreateData{}, errors.New("couldn't create request: " + err.Error())
 	}
 
@@ -82,7 +80,6 @@ func (c *Client) OrderCreate(currency Currency, instrument Instrument, price Amo
 
 	res, err := netHTTPClient.Do(req)
 	if err != nil {
-		fmt.Println("error receiving order response: " + err.Error())
 		return OrderCreateData{}, errors.New("couldn't receive order response: " + err.Error())
 	}
 	defer res.Body.Close()
@@ -136,7 +133,6 @@ func (c *Client) OrderCancel(orderid OrderID) error {
 
 	req, err := http.NewRequest("POST", fmt.Sprintf("%s/order/cancel", APILocation), reader)
 	if err != nil {
-		fmt.Println("error creating order request: " + err.Error())
 		return err
 	}
 
@@ -149,7 +145,6 @@ func (c *Client) OrderCancel(orderid OrderID) error {
 
 	res, err := netHTTPClient.Do(req)
 	if err != nil {
-		fmt.Println("error receiving order response: " + err.Error())
 		return err
 	}
 	defer res.Body.Close()
@@ -201,7 +196,6 @@ func (c *Client) OrderHistory(currency Currency, instrument Instrument, limit in
 
 	req, err := http.NewRequest("POST", fmt.Sprintf("%s/order/history", APILocation), reader)
 	if err != nil {
-		fmt.Println("error creating order request: " + err.Error())
 		return OrderHistoryData{}, err
 	}
 
@@ -214,7 +208,6 @@ func (c *Client) OrderHistory(currency Currency, instrument Instrument, limit in
 
 	res, err := netHTTPClient.Do(req)
 	if err != nil {
-		fmt.Println("error receiving order response: " + err.Error())
 		return OrderHistoryData{}, err
 	}
 	defer res.Body.Close()
@@ -223,8 +216,6 @@ func (c *Client) OrderHistory(currency Currency, instrument Instrument, limit in
 	if err != nil {
 		return OrderHistoryData{}, err
 	}
-
-	fmt.Printf("\n\n%s\n\n", body)
 
 	var orderResult OrderHistoryData
 	err = json.Unmarshal(body, &orderResult)
@@ -268,7 +259,6 @@ func (c *Client) OrderOpen(currency Currency, instrument Instrument, limit int, 
 
 	req, err := http.NewRequest("POST", fmt.Sprintf("%s/order/open", APILocation), reader)
 	if err != nil {
-		fmt.Println("error creating order request: " + err.Error())
 		return OrderHistoryData{}, err
 	}
 
@@ -281,7 +271,6 @@ func (c *Client) OrderOpen(currency Currency, instrument Instrument, limit int, 
 
 	res, err := netHTTPClient.Do(req)
 	if err != nil {
-		fmt.Println("error receiving order response: " + err.Error())
 		return OrderHistoryData{}, err
 	}
 	defer res.Body.Close()
@@ -333,7 +322,6 @@ func (c *Client) OrderDetail(orderid OrderID) error {
 
 	req, err := http.NewRequest("POST", fmt.Sprintf("%s/order/cancel", APILocation), reader)
 	if err != nil {
-		fmt.Println("error creating order request: " + err.Error())
 		return err
 	}
 
@@ -346,7 +334,6 @@ func (c *Client) OrderDetail(orderid OrderID) error {
 
 	res, err := netHTTPClient.Do(req)
 	if err != nil {
-		fmt.Println("error receiving order response: " + err.Error())
 		return err
 	}
 	defer res.Body.Close()
