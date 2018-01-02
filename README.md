@@ -1,4 +1,4 @@
-# Go BTC Markets - v0.1.0
+# Go BTC Markets
 
 This package is a Go (Golang) effort to use the BTC Markets API, available at https://api.btcmarkets.net and documented on the [BTCMarkets/API](https://github.com/BTCMarkets/API) project. Please visit the API documentation to find out more about the service API. This is simply a connector.
 This package is not affiliated with or created by BTC Markets Pty Ltd, but is intended to assist people in using their API from Go.
