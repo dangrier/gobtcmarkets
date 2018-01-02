@@ -32,13 +32,13 @@ The package itself is exported on the name `btcmarkets`.
 // then buys them, then waits to hit a profit threshold, sells the bitcoin, and
 // moves the profit to your chosen account.
 //
-// Please be aware! If you run this - it WILL send the profit to the account
-// selected, so please change it before running. There is also a chance that
-// profit may never be realised, which is why this is a basic (dumb) bot.
+// Please be aware! If you run this - make sure you understand what it is doing first! 
+// There is also a chance that profit may never be realised, which is why this is a 
+// basic (dumb) bot.
 //
 // It may seem like some sections of this code will send a large amount of requests
 // to the API, however the rate limiting will prevent this - all you have to worry
-// about it making the API calls!
+// about is making the API calls!
 package main
 
 import (
