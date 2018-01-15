@@ -1,7 +1,8 @@
 # Go BTC Markets
 
-This package is a Go (Golang) effort to use the BTC Markets API, available at https://api.btcmarkets.net and documented on the [BTCMarkets/API](https://github.com/BTCMarkets/API) project. Please visit the API documentation to find out more about the service API. This is simply a connector.
-This package is not affiliated with or created by BTC Markets Pty Ltd, but is intended to assist people in using their API from Go.
+This package is a Go (Golang) effort to use the BTC Markets API, available at https://api.btcmarkets.net and documented on the [BTCMarkets/API](https://github.com/BTCMarkets/API) project. Please visit the API documentation to find out more about the service API. This is simply an API client.
+
+This package is not affiliated with or created by BTC Markets Pty Ltd, but is intended to assist people in using their API with Go.
 
 ## Getting Started
 
@@ -9,8 +10,8 @@ You will need [Go](https://golang.org/) installed to use this package.
 
 Then run a go get to grab the latest source for this package.
 
-```
-go get github.com/dangrier/gobtcmarkets
+```bash
+go get -u github.com/dangrier/gobtcmarkets
 ```
 
 You will also need a public and private key pair generated from your account at [BTC Markets](https://btcmarkets.net).
@@ -22,9 +23,11 @@ To use this package, include it in your imports.
 ```go
 import "github.com/dangrier/gobtcmarkets"
 ```
+
 The package itself is exported on the name `btcmarkets`.
 
 #### Example - Basic Dumb Bot
+
 ```go
 // Filename: basicbot.go
 //
@@ -32,8 +35,8 @@ The package itself is exported on the name `btcmarkets`.
 // then buys them, then waits to hit a profit threshold, sells the bitcoin, and
 // moves the profit to your chosen account.
 //
-// Please be aware! If you run this - make sure you understand what it is doing first! 
-// There is also a chance that profit may never be realised, which is why this is a 
+// Please be aware! If you run this - make sure you understand what it is doing first!
+// There is also a chance that profit may never be realised, which is why this is a
 // basic (dumb) bot.
 //
 // It may seem like some sections of this code will send a large amount of requests
@@ -162,7 +165,7 @@ func main() {
 	// YOU NOW HAVE ENOUGH PROFIT!
 
 	// Sell the bitcoin
-	sellOrder, err := cl.OrderCreate(btcmarkets.CurrencyAUD, btcmarkets.InstrumentBitcoin, rate.Last.ToAmountWhole(), coins.ToAmountWhole(), btcmarkets.Ask, btcmarkets.Market)
+	sellOrder, err := cl.OrderCreate(btcmarkets.CurrencyAUD, btcmarkets.InstrumentBitcoin, rate.Last.ToAmountWhole(), coins.ToAmountWhole(), btcmarkets.Ask, btcmarkets.Market, "ABC123")
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -201,12 +204,7 @@ func main() {
 
 	fmt.Printf("DONE! Made $%.2f profit!", profitThreshold*usable)
 }
-
 ```
-
-## Built With
-
-* [Go](https://golang.org/)
 
 ## Versioning
 
@@ -217,9 +215,9 @@ Versions prefixed with major version 0 (0.X.X) should be considered initial deve
 ## Authors
 
 * **Dan Grier** - *Initial work* - [dangrier](https://github.com/dangrier)
+* **Nick Law** - *Core contributor* - [nicklaw5](https://github.com/nicklaw5)
 
-If you like my work feel free to send me a beer at
-[Bitcoin: 1CynPcMe1ZnHV3r2Zoi7snLMmj1RWSDsXy](https://blockchain.info/payment_request?address=1CynPcMe1ZnHV3r2Zoi7snLMmj1RWSDsXy)
+If you like to show your support for the work that went into creating this library feel free to send Dan a beer at [Bitcoin: 1CynPcMe1ZnHV3r2Zoi7snLMmj1RWSDsXy](https://blockchain.info/payment_request?address=1CynPcMe1ZnHV3r2Zoi7snLMmj1RWSDsXy)
 
 ## License
 

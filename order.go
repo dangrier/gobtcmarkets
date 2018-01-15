@@ -1,352 +1,25 @@
 package btcmarkets
 
 import (
-	"encoding/json"
 	"errors"
-	"fmt"
-	"io/ioutil"
 	"math"
-	"net/http"
-	"strings"
-	"time"
 )
 
 /*
-ORDERS [HTTP POST ENDPOINTS]
+ORDERS [HTTP ENDPOINTS]
 
 Endpoints:
-/order/create							(Rate Limited: 10x / 10sec)
-/order/cancel							(Rate Limited: 25x / 10sec)
-/order/history						(Rate Limited: 10x / 10sec)
-/order/open								(Rate Limited: 25x / 10sec)
-/order/trade/history			(Rate Limited: 10x / 10sec)
-/order/detail							(Rate Limited: 25x / 10sec)
+POST /order/create			(Rate Limited: 10x / 10sec)
+POST /order/cancel			(Rate Limited: 25x / 10sec)
+POST /order/history			(Rate Limited: 10x / 10sec)
+POST /order/open			(Rate Limited: 25x / 10sec)
+POST /order/trade/history	(Rate Limited: 10x / 10sec)
+POST /order/detail			(Rate Limited: 25x / 10sec)
 */
 
-// OrderCreate implements the /order/create endpoint.
-func (c *Client) OrderCreate(currency Currency, instrument Instrument, price AmountWhole, volume AmountWhole, side OrderSide, ordertype OrderType) (OrderCreateData, error) {
-	err := c.Limit10()
-	if err != nil {
-		return OrderCreateData{}, errors.New("error conducting rate limiting: " + err.Error())
-	}
-
-	var reqObject RequestOrderCreate
-	reqObject.Currency = currency
-	reqObject.Instrument = instrument
-	reqObject.Price = price
-	reqObject.Volume = volume
-	reqObject.ClientRequestID = "abc-cdf-1000"
-	reqObject.OrderSide = side
-	reqObject.OrderType = ordertype
-
-	// Market orders should ignore prices, but add protection in case API changes.
-	// A market bid is set to the lowest value, and ask to the highest
-	if ordertype == Market && side == Bid {
-		reqObject.Price = 1
-	}
-	if ordertype == Market && side == Ask {
-		reqObject.Price = 99999900000000
-	}
-
-	// An AUD currency amount is not allowed to have more than two decimal places
-	if currency == CurrencyAUD && math.Mod(float64(price), 1000000) != 0 {
-		// If the third degree decimal onwards has a value, then return 0 (error)
-		return OrderCreateData{}, errors.New("AUD currency only allows two decimal places")
-	}
-
-	// Have to use json.Marshal instead of Encoder, as API is sensitive to \n
-	// characters in the request body (results in an auth error)
-	jreqObject, err := json.Marshal(reqObject)
-	if err != nil {
-		return OrderCreateData{}, errors.New("couldn't create object: " + err.Error())
-	}
-	sreqObject := string(jreqObject)
-	reader := strings.NewReader(sreqObject)
-
-	ts := time.Now()
-	signature := c.messageSignature("/order/create", ts, sreqObject)
-
-	req, err := http.NewRequest("POST", fmt.Sprintf("%s/order/create", APILocation), reader)
-	if err != nil {
-		return OrderCreateData{}, errors.New("couldn't create request: " + err.Error())
-	}
-
-	req.Header.Set("Accept", "application/json")
-	req.Header.Set("Accept-Charset", "UTF-8")
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("apikey", c.apikey)
-	req.Header.Set("timestamp", fmt.Sprintf("%d", ts.UnixNano()/int64(time.Millisecond)))
-	req.Header.Set("signature", signature)
-
-	res, err := netHTTPClient.Do(req)
-	if err != nil {
-		return OrderCreateData{}, errors.New("couldn't receive order response: " + err.Error())
-	}
-	defer res.Body.Close()
-
-	body, err := ioutil.ReadAll(res.Body)
-	if err != nil {
-		return OrderCreateData{}, errors.New("couldn't read response body: " + err.Error())
-	}
-
-	var orderResult OrderCreateData
-	err = json.Unmarshal(body, &orderResult)
-	if err != nil {
-		return OrderCreateData{}, errors.New("couldn't unmarshal response: " + err.Error())
-	}
-
-	// The API should return 0 on an error - but this is not explicit.
-	// Force this just in case
-	if !orderResult.Success {
-		return OrderCreateData{}, errors.New("request error: " + orderResult.Error)
-	}
-
-	return orderResult, nil
-}
-
-// OrderCancel implements the /order/cancel endpoint.
-//
-// Takes the orderid of the order to be cancelled (ie. the same ID created in
-// the OrderCreate result object's ID field)
-//
-// TODO: Update inconsistent error returns
-func (c *Client) OrderCancel(orderid OrderID) error {
-	err := c.Limit10()
-	if err != nil {
-		return errors.New("error conducting rate limiting: " + err.Error())
-	}
-
-	var reqObject RequestOrderSpecific
-	reqObject.Orders = append(reqObject.Orders, orderid)
-
-	// Have to use json.Marshal instead of Encoder, as API is sensitive to \n
-	// characters in the request body (results in an auth error)
-	jsonObj, err := json.Marshal(reqObject)
-	if err != nil {
-		return err
-	}
-	sObj := string(jsonObj)
-	reader := strings.NewReader(sObj)
-
-	ts := time.Now()
-	signature := c.messageSignature("/order/cancel", ts, sObj)
-
-	req, err := http.NewRequest("POST", fmt.Sprintf("%s/order/cancel", APILocation), reader)
-	if err != nil {
-		return err
-	}
-
-	req.Header.Set("Accept", "application/json")
-	req.Header.Set("Accept-Charset", "UTF-8")
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("apikey", c.apikey)
-	req.Header.Set("timestamp", fmt.Sprintf("%d", ts.UnixNano()/int64(time.Millisecond)))
-	req.Header.Set("signature", signature)
-
-	res, err := netHTTPClient.Do(req)
-	if err != nil {
-		return err
-	}
-	defer res.Body.Close()
-
-	body, err := ioutil.ReadAll(res.Body)
-	if err != nil {
-		return err
-	}
-
-	var orderResult OrderCreateData
-	err = json.Unmarshal(body, &orderResult)
-	if err != nil {
-		return err
-	}
-
-	// The API should return 0 on an error - but this is not explicit.
-	// Force this just in case
-	if !orderResult.Success {
-		return err
-	}
-
-	return nil
-}
-
-// OrderHistory implements the /order/history API endpoint
-func (c *Client) OrderHistory(currency Currency, instrument Instrument, limit int, since OrderID) (OrderHistoryData, error) {
-	err := c.Limit10()
-	if err != nil {
-		return OrderHistoryData{}, errors.New("error conducting rate limiting: " + err.Error())
-	}
-
-	var reqObject RequestOrderHistory
-	reqObject.Currency = currency
-	reqObject.Instrument = instrument
-	reqObject.Limit = limit
-	reqObject.Since = since
-
-	// Have to use json.Marshal instead of Encoder, as API is sensitive to \n
-	// characters in the request body (results in an auth error)
-	jsonObj, err := json.Marshal(reqObject)
-	if err != nil {
-		return OrderHistoryData{}, err
-	}
-	sObj := string(jsonObj)
-	reader := strings.NewReader(sObj)
-
-	ts := time.Now()
-	signature := c.messageSignature("/order/history", ts, sObj)
-
-	req, err := http.NewRequest("POST", fmt.Sprintf("%s/order/history", APILocation), reader)
-	if err != nil {
-		return OrderHistoryData{}, err
-	}
-
-	req.Header.Set("Accept", "application/json")
-	req.Header.Set("Accept-Charset", "UTF-8")
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("apikey", c.apikey)
-	req.Header.Set("timestamp", fmt.Sprintf("%d", ts.UnixNano()/int64(time.Millisecond)))
-	req.Header.Set("signature", signature)
-
-	res, err := netHTTPClient.Do(req)
-	if err != nil {
-		return OrderHistoryData{}, err
-	}
-	defer res.Body.Close()
-
-	body, err := ioutil.ReadAll(res.Body)
-	if err != nil {
-		return OrderHistoryData{}, err
-	}
-
-	var orderResult OrderHistoryData
-	err = json.Unmarshal(body, &orderResult)
-	if err != nil {
-		return OrderHistoryData{}, err
-	}
-
-	// The API should return 0 on an error - but this is not explicit.
-	// Force this just in case
-	if !orderResult.Success {
-		return OrderHistoryData{}, err
-	}
-
-	return orderResult, nil
-}
-
-// OrderOpen implements the /order/open API endpoint
-func (c *Client) OrderOpen(currency Currency, instrument Instrument, limit int, since OrderID) (OrderHistoryData, error) {
-	err := c.Limit10()
-	if err != nil {
-		return OrderHistoryData{}, errors.New("error conducting rate limiting: " + err.Error())
-	}
-
-	var reqObject RequestOrderHistory
-	reqObject.Currency = currency
-	reqObject.Instrument = instrument
-	reqObject.Limit = limit
-	reqObject.Since = since
-
-	// Have to use json.Marshal instead of Encoder, as API is sensitive to \n
-	// characters in the request body (results in an auth error)
-	jsonObj, err := json.Marshal(reqObject)
-	if err != nil {
-		return OrderHistoryData{}, err
-	}
-	sObj := string(jsonObj)
-	reader := strings.NewReader(sObj)
-
-	ts := time.Now()
-	signature := c.messageSignature("/order/open", ts, sObj)
-
-	req, err := http.NewRequest("POST", fmt.Sprintf("%s/order/open", APILocation), reader)
-	if err != nil {
-		return OrderHistoryData{}, err
-	}
-
-	req.Header.Set("Accept", "application/json")
-	req.Header.Set("Accept-Charset", "UTF-8")
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("apikey", c.apikey)
-	req.Header.Set("timestamp", fmt.Sprintf("%d", ts.UnixNano()/int64(time.Millisecond)))
-	req.Header.Set("signature", signature)
-
-	res, err := netHTTPClient.Do(req)
-	if err != nil {
-		return OrderHistoryData{}, err
-	}
-	defer res.Body.Close()
-
-	body, err := ioutil.ReadAll(res.Body)
-	if err != nil {
-		return OrderHistoryData{}, err
-	}
-
-	var orderResult OrderHistoryData
-	err = json.Unmarshal(body, &orderResult)
-	if err != nil {
-		return OrderHistoryData{}, err
-	}
-
-	// The API should return 0 on an error - but this is not explicit.
-	// Force this just in case
-	if !orderResult.Success {
-		return OrderHistoryData{}, err
-	}
-
-	return orderResult, nil
-}
-
-// OrderDetail implements the /order/detail API endpoint
-//
-// This endpoint doesn't appear to give the details of an order as expected,
-// instead it appears to indicate whether an order exists.
-func (c *Client) OrderDetail(orderid OrderID) error {
-	err := c.Limit10()
-	if err != nil {
-		return errors.New("error conducting rate limiting: " + err.Error())
-	}
-
-	var reqObject RequestOrderSpecific
-	reqObject.Orders = append(reqObject.Orders, orderid)
-
-	// Have to use json.Marshal instead of Encoder, as API is sensitive to \n
-	// characters in the request body (results in an auth error)
-	jsonObj, err := json.Marshal(reqObject)
-	if err != nil {
-		return err
-	}
-	sObj := string(jsonObj)
-	reader := strings.NewReader(sObj)
-
-	ts := time.Now()
-	signature := c.messageSignature("/order/cancel", ts, sObj)
-
-	req, err := http.NewRequest("POST", fmt.Sprintf("%s/order/cancel", APILocation), reader)
-	if err != nil {
-		return err
-	}
-
-	req.Header.Set("Accept", "application/json")
-	req.Header.Set("Accept-Charset", "UTF-8")
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("apikey", c.apikey)
-	req.Header.Set("timestamp", fmt.Sprintf("%d", ts.UnixNano()/int64(time.Millisecond)))
-	req.Header.Set("signature", signature)
-
-	res, err := netHTTPClient.Do(req)
-	if err != nil {
-		return err
-	}
-	defer res.Body.Close()
-
-	_, err = ioutil.ReadAll(res.Body)
-	if err != nil {
-		return err
-	}
-
-	return nil
-}
-
-type RequestOrderCreate struct {
+// OrderCreateRequest represents the JSON data structure sent to
+// the POST /order/create endpoint.
+type OrderCreateRequest struct {
 	Currency        Currency    `json:"currency"`
 	Instrument      Instrument  `json:"instrument"`
 	Price           AmountWhole `json:"price"`
@@ -356,21 +29,197 @@ type RequestOrderCreate struct {
 	ClientRequestID string      `json:"clientRequestId"`
 }
 
-type RequestOrderSpecific struct {
-	Orders []OrderID `json:"orderIds"`
+// OrderCreateResponse represents the JSON data structure returned from
+// the POST /order/create endpoint.
+type OrderCreateResponse struct {
+	Success         bool    `json:"success"`
+	ErrorCode       int     `json:"errorCode"`
+	ErrorMessage    string  `json:"errorMessage"`
+	ID              OrderID `json:"id"`
+	ClientRequestID string  `json:"clientRequestId"`
 }
 
-type RequestOrderHistory struct {
+// OrderCreate implements the POST /order/create endpoint.
+func (c *Client) OrderCreate(
+	currency Currency,
+	instrument Instrument,
+	price AmountWhole,
+	volume AmountWhole,
+	side OrderSide,
+	ordertype OrderType,
+	requestID string,
+) (*OrderCreateResponse, error) {
+	rec := &OrderCreateRequest{
+		Currency:        currency,
+		Instrument:      instrument,
+		Price:           price,
+		Volume:          volume,
+		ClientRequestID: requestID,
+		OrderSide:       side,
+		OrderType:       ordertype,
+	}
+
+	// Market orders should ignore prices, but add protection in case API changes.
+	// A market bid is set to the lowest value, and ask to the highest
+	if rec.OrderType == Market && rec.OrderSide == Bid {
+		rec.Price = 1
+	}
+	if rec.OrderType == Market && rec.OrderSide == Ask {
+		rec.Price = 99999900000000
+	}
+
+	// An AUD currency amount is not allowed to have more than two decimal places
+	if rec.Currency == CurrencyAUD && math.Mod(float64(rec.Price), 1000000) != 0 {
+		// If the third degree decimal onwards has a value, then return 0 (error)
+		return nil, errors.New("AUD currency only allows two decimal places")
+	}
+
+	ocr := &OrderCreateResponse{}
+
+	err := c.Post("/order/create", rec, ocr, rateLimit10)
+	if err != nil {
+		return nil, err
+	}
+
+	return ocr, nil
+}
+
+// OrderCancelResponse represents the JSON data structure returned from
+// the POST /order/cancel endpoint.
+type OrderCancelResponse struct {
+	Success      bool              `json:"success"`
+	ErrorCode    int               `json:"errorCode"`
+	ErrorMessage string            `json:"errorMessage"`
+	Responses    []OrderCancelData `json:"responses"`
+}
+
+// OrderCancelData represents the JSON data structure of a cancel order.
+type OrderCancelData struct {
+	Success      bool    `json:"success"`
+	ErrorCode    int     `json:"errorCode"`
+	ErrorMessage string  `json:"errorMessage"`
+	ID           OrderID `json:"id"`
+}
+
+// OrderCancel implements the POST /order/cancel endpoint.
+func (c *Client) OrderCancel(orderIDs ...OrderID) (*OrderCancelResponse, error) {
+	ros := &OrdersSpecificRequest{
+		Orders: orderIDs,
+	}
+
+	ocr := &OrderCancelResponse{}
+
+	err := c.Post("/order/cancel", ros, ocr, rateLimit10)
+	if err != nil {
+		return nil, err
+	}
+
+	return ocr, nil
+}
+
+// OrderHistoryRequest represents the JSON data structure sent to
+// the POST /order/history endpoint.
+type OrderHistoryRequest struct {
 	Currency   Currency   `json:"currency"`
 	Instrument Instrument `json:"instrument"`
 	Limit      int        `json:"limit"`
 	Since      OrderID    `json:"since"`
 }
 
+// OrderHistoryResponse represents the JSON data structure returned from
+// the POST /order/history endpoint. It shares the same data
+// structure as OrderDetailResponse
+type OrderHistoryResponse struct {
+	OrderDetailResponse
+}
+
+// OrderHistory implements the POST /order/history API endpoint
+func (c *Client) OrderHistory(currency Currency, instrument Instrument, limit int, since OrderID) (*OrderHistoryResponse, error) {
+	ohReq := &OrderHistoryRequest{
+		Currency:   currency,
+		Instrument: instrument,
+		Limit:      limit,
+		Since:      since,
+	}
+
+	ohRes := &OrderHistoryResponse{}
+
+	err := c.Post("/order/history", ohReq, ohRes, rateLimit10)
+	if err != nil {
+		return nil, err
+	}
+
+	return ohRes, nil
+}
+
+// OrderOpenRequest represents the JSON data structure sent to
+// the POST /order/open endpoint. It shares the same data
+// structure as OrderHistoryRequest
+type OrderOpenRequest struct {
+	OrderHistoryRequest
+}
+
+// OrderOpenResponse represents the JSON data structure returned from
+// the POST /order/open endpoint. It shares the same data
+// structure as OrderDetailResponse
+type OrderOpenResponse struct {
+	OrderDetailResponse
+}
+
+// OrderOpen implements the POST /order/open API endpoint
+func (c *Client) OrderOpen(currency Currency, instrument Instrument, limit int, since OrderID) (*OrderOpenResponse, error) {
+	roh := &OrderOpenRequest{}
+	roh.Currency = currency
+	roh.Instrument = instrument
+	roh.Limit = limit
+	roh.Since = since
+
+	oor := &OrderOpenResponse{}
+
+	err := c.Post("/order/open", roh, oor, rateLimit10)
+	if err != nil {
+		return nil, err
+	}
+
+	return oor, nil
+}
+
+// OrderDetailResponse represents the JSON data structure returned from
+// the POST /order/detail endpoint.
+type OrderDetailResponse struct {
+	Success      bool            `json:"success"`
+	ErrorCode    string          `json:"errorCode"`
+	ErrorMessage string          `json:"errorMessage"`
+	Orders       []OrderDataItem `josn:"orders"`
+}
+
+// OrderDetail implements the POST /order/detail API endpoint
+func (c *Client) OrderDetail(orderIDs ...OrderID) (*OrderDetailResponse, error) {
+	ros := &OrdersSpecificRequest{
+		Orders: orderIDs,
+	}
+
+	odr := &OrderDetailResponse{}
+
+	err := c.Post("/order/detail", ros, odr, rateLimit10)
+	if err != nil {
+		return nil, err
+	}
+
+	return odr, nil
+}
+
+// OrdersSpecificRequest is the data structure for sending multiple orders ids
+// for endpoints that support that feature.
+type OrdersSpecificRequest struct {
+	Orders []OrderID `json:"orderIds"`
+}
+
 // OrderSide is used when creating an order to state whether the order is an
 // ask (sell), or a bid (buy).
 type OrderSide string
 
+// Enumerated order sides
 const (
 	Ask OrderSide = "Ask"
 	Bid OrderSide = "Bid"
@@ -381,6 +230,7 @@ const (
 // market value.
 type OrderType string
 
+// Enumerated order types
 const (
 	Limit  OrderType = "Limit"
 	Market OrderType = "Market"
@@ -418,39 +268,27 @@ const (
 	OrderStatusPartiallyMatched = "Partially Matched"
 )
 
-// OrderCreateData is used to structure the returned data from the OrderCreate
-// method. ID is the order ID of the created order.
-type OrderCreateData struct {
-	Success bool    `json:"success"`
-	Error   string  `json:"errorMessage"`
-	ID      OrderID `json:"id"`
-}
-
 // OrderID is an integer representing the returned ID of a created order
 type OrderID int64
 
-type OrderHistoryData struct {
-	Success bool                   `json:"success"`
-	Error   string                 `json:"errorMessage"`
-	Orders  []OrderHistoryDataItem `json:"orders"`
+// OrderDataItem is the data structure that represents a single order
+type OrderDataItem struct {
+	OrderID      OrderID              `json:"id"`
+	Currency     Currency             `json:"currency"`
+	Instrument   Instrument           `json:"instrument"`
+	OrderSide    OrderSide            `json:"orderSide"`
+	OrderType    OrderType            `json:"ordertype"`
+	Created      int64                `json:"creationTime"`
+	Status       OrderStatus          `json:"status"`
+	ErrorMessage string               `json:"errorMessage"`
+	Price        AmountWhole          `json:"price"`
+	Volume       AmountWhole          `json:"volume"`
+	VolumeOpen   AmountWhole          `json:"openVolume"`
+	Trades       []OrderTradeDataItem `json:"trades"`
 }
 
-type OrderHistoryDataItem struct {
-	OrderID    OrderID                `json:"id"`
-	Currency   Currency               `json:"currency"`
-	Instrument Instrument             `json:"instrument"`
-	OrderSide  OrderSide              `json:"orderSide"`
-	OrderType  OrderType              `json:"ordertype"`
-	Created    int64                  `json:"creationTime"`
-	Status     OrderStatus            `json:"status"`
-	Error      string                 `json:"errorMessage"`
-	Price      AmountWhole            `json:"price"`
-	Volume     AmountWhole            `json:"volume"`
-	VolumeOpen AmountWhole            `json:"openVolume"`
-	Trades     []TradeHistoryDataItem `json:"trades"`
-}
-
-type TradeHistoryDataItem struct {
+// OrderTradeDataItem is the data structure that represents a single trade
+type OrderTradeDataItem struct {
 	TradeID     TradeID     `json:"id"`
 	Created     int64       `json:"creationTime"`
 	Description string      `json:"description"`
