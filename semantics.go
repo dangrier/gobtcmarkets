@@ -2,10 +2,6 @@ package btcmarkets
 
 import "math"
 
-// APILocation is the protocol, and domain of the API to connect to. As this is
-// currently fixed, there is no reason to provide adjustment of this value.
-const APILocation = "https://api.btcmarkets.net"
-
 // AmountDecimal is a float type which represents the API numbers returned which
 // can have decimal places.
 //
@@ -37,6 +33,7 @@ func (amount AmountWhole) ToAmountDecimal() AmountDecimal {
 // Currency represents the name of a real-world or crypto currency
 type Currency string
 
+// Enumerated currencies.
 const (
 	CurrencyAUD        Currency = "AUD"
 	CurrencyBcash      Currency = "BCH"
@@ -50,6 +47,7 @@ const (
 // Instrument represents the name of a crypto currency
 type Instrument string
 
+// Enumerated instruments.
 const (
 	InstrumentBcash      Instrument = "BCH"
 	InstrumentBitcoin    Instrument = "BTC"

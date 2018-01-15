@@ -2,112 +2,21 @@ package btcmarkets
 
 import (
 	"bytes"
-	"encoding/json"
-	"errors"
 	"fmt"
-	"io/ioutil"
 )
 
 /*
-MARKET [HTTP GET ENDPOINTS]
+MARKET [HTTP ENDPOINTS]
 
 Endpoints:
-/market/BTC/AUD/tick
-/market/BTC/AUD/orderbook
-/market/BTC/AUD/trades
-
-An optional GET parameter "since" can be used against the trades endpoint
+GET /market/BTC/AUD/tick
+GET /market/BTC/AUD/orderbook
+GET /market/BTC/AUD/trades
 */
 
-// MarketTick implements the /market/[instrument]/[currency]/tick endpoint.
-func (c *Client) MarketTick(instrument Instrument, currency Currency) (MarketTickData, error) {
-	err := c.Limit10()
-	if err != nil {
-		return MarketTickData{}, errors.New("error conducting rate limiting: " + err.Error())
-	}
-	res, err := netHTTPClient.Get(fmt.Sprintf("%s/market/%s/%s/tick", APILocation, instrument, currency))
-	if err != nil {
-		return MarketTickData{}, err
-	}
-	defer res.Body.Close()
-
-	body, err := ioutil.ReadAll(res.Body)
-	if err != nil {
-		return MarketTickData{}, err
-	}
-
-	var mtd MarketTickData
-	err = json.Unmarshal(body, &mtd)
-	if err != nil {
-		return MarketTickData{}, err
-	}
-
-	return mtd, nil
-}
-
-// MarketOrderbook implements the /market/[instrument]/[currency]/orderbook endpoint.
-func (c *Client) MarketOrderbook(instrument Instrument, currency Currency) (MarketOrderbookData, error) {
-	err := c.Limit10()
-	if err != nil {
-		return MarketOrderbookData{}, errors.New("error conducting rate limiting: " + err.Error())
-	}
-
-	res, err := netHTTPClient.Get(fmt.Sprintf("%s/market/%s/%s/orderbook", APILocation, instrument, currency))
-	if err != nil {
-		return MarketOrderbookData{}, err
-	}
-	defer res.Body.Close()
-
-	body, err := ioutil.ReadAll(res.Body)
-	if err != nil {
-		return MarketOrderbookData{}, err
-	}
-
-	var mod MarketOrderbookData
-	err = json.Unmarshal(body, &mod)
-	if err != nil {
-		return MarketOrderbookData{}, err
-	}
-
-	return mod, nil
-}
-
-// MarketTrades implements the /market/[instrument]/[currency]/trades endpoint.
-//
-// "since" is an optional parameter which, when greater than 0 will only get MarketTrades
-// which occurred since the supplied trade ID.
-func (c *Client) MarketTrades(instrument Instrument, currency Currency, since int64) (MarketTradesData, error) {
-	err := c.Limit10()
-	if err != nil {
-		return MarketTradesData{}, errors.New("error conducting rate limiting: " + err.Error())
-	}
-
-	var uriSince string
-	if since > 0 {
-		uriSince = fmt.Sprintf("?since=%d", since)
-	}
-
-	res, err := netHTTPClient.Get(fmt.Sprintf("%s/market/%s/%s/trades%s", APILocation, instrument, currency, uriSince))
-	if err != nil {
-		return MarketTradesData{}, err
-	}
-	defer res.Body.Close()
-
-	body, err := ioutil.ReadAll(res.Body)
-	if err != nil {
-		return MarketTradesData{}, err
-	}
-
-	var mtd MarketTradesData
-	err = json.Unmarshal(body, &mtd)
-	if err != nil {
-		return MarketTradesData{}, err
-	}
-
-	return mtd, nil
-}
-
-type MarketTickData struct {
+// MarketTickResponse represents the JSON data structure returned from
+// the GET /market/:instrument/:currency/tick endpoint.
+type MarketTickResponse struct {
 	Bid        AmountDecimal `json:"bestBid"`
 	Ask        AmountDecimal `json:"bestAsk"`
 	Last       AmountDecimal `json:"lastPrice"`
@@ -117,7 +26,21 @@ type MarketTickData struct {
 	Volume     float64       `json:"volume24h"`
 }
 
-type MarketOrderbookData struct {
+// MarketTick implements the GET /market/:instrument/:currency/tick endpoint.
+func (c *Client) MarketTick(instrument Instrument, currency Currency) (*MarketTickResponse, error) {
+	mtr := &MarketTickResponse{}
+
+	err := c.Get(fmt.Sprintf("/market/%s/%s/tick", instrument, currency), mtr, rateLimit10)
+	if err != nil {
+		return nil, err
+	}
+
+	return mtr, nil
+}
+
+// MarketOrderbookResponse represents the JSON data structure returned from
+// the GET /market/:instrument/:currency/orderbook endpoint.
+type MarketOrderbookResponse struct {
 	Bids       [][]float64 `json:"bids"`
 	Asks       [][]float64 `json:"asks"`
 	Currency   Currency    `json:"currency"`
@@ -125,25 +48,65 @@ type MarketOrderbookData struct {
 	Timestamp  int64       `json:"timestamp"`
 }
 
-type MarketTradesData []TradeData
+// MarketOrderbook implements the GET /market/:instrument/:currency/orderbook endpoint.
+func (c *Client) MarketOrderbook(instrument Instrument, currency Currency) (*MarketOrderbookResponse, error) {
+	mor := &MarketOrderbookResponse{}
 
-func (td *MarketTradesData) Describe() string {
+	err := c.Get(fmt.Sprintf("/market/%s/%s/orderbook", instrument, currency), mor, rateLimit10)
+	if err != nil {
+		return nil, err
+	}
+
+	return mor, nil
+}
+
+// MarketTradesResponse represents the JSON data structure returned from
+// the GET /market/:instrument/:currency/trades endpoint.
+type MarketTradesResponse []MarketTradeDataItem
+
+// MarketTrades implements the GET /market/:instrument/:currency/trades endpoint.
+//
+// "since" is an optional parameter which, when greater than 0 will only get MarketTrades
+// which occurred since the supplied trade ID.
+func (c *Client) MarketTrades(instrument Instrument, currency Currency, since OrderID) (*MarketTradesResponse, error) {
+	var sinceURI string
+	if since > 0 {
+		sinceURI = fmt.Sprintf("?since=%d", since)
+	}
+
+	mtr := &MarketTradesResponse{}
+
+	err := c.Get(fmt.Sprintf("/market/%s/%s/trades%s", instrument, currency, sinceURI), mtr, rateLimit10)
+	if err != nil {
+		// TODO: fix this error
+		return nil, err
+	}
+
+	return mtr, nil
+}
+
+// Describe is a helper method for displaying trades in human-readable format.
+func (mtr *MarketTradesResponse) Describe() string {
 	var buff bytes.Buffer
-	for _, el := range *td {
+	for _, el := range *mtr {
 		buff.WriteString(fmt.Sprintf("%s\n", el.String()))
 	}
+
 	return buff.String()
 }
 
+// TradeID is a unique trade id.
 type TradeID int64
 
-type TradeData struct {
+// MarketTradeDataItem is the data structure that represents a single trade
+type MarketTradeDataItem struct {
 	TradeID   TradeID       `json:"tid"`
 	Amount    AmountDecimal `json:"amount"`
 	Price     AmountDecimal `json:"price"`
 	Timestamp int64         `json:"date"`
 }
 
-func (td *TradeData) String() string {
-	return fmt.Sprintf("Trade %d: %f - %f at %f", td.TradeID, td.Amount*td.Price, td.Amount, td.Price)
+// String is a helper method for displaying a trade in human-readable format.
+func (mtdi *MarketTradeDataItem) String() string {
+	return fmt.Sprintf("Trade %d: %f - %f at %f", mtdi.TradeID, mtdi.Amount*mtdi.Price, mtdi.Amount, mtdi.Price)
 }

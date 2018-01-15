@@ -1,112 +1,57 @@
 package btcmarkets
 
 import (
-	"encoding/json"
-	"errors"
 	"fmt"
-	"io/ioutil"
-	"net/http"
-	"time"
 )
 
 /*
-ACCOUNT [HTTP GET ENDPOINTS]
+ACCOUNT [HTTP ENDPOINTS]
 
 Endpoints:
-/account/balance															(Rate Limited: 25x / 10sec)
-/account/:instrument/:currency/tradingfee			(Rate Limited: 10x / 10sec)
+GET /account/balance							(Rate Limited: 25x / 10sec)
+GET /account/:instrument/:currency/tradingfee	(Rate Limited: 10x / 10sec)
 */
 
-// AccountBalance implements the /account/balance endpoint.
-func (c *Client) AccountBalance() (AccountBalances, error) {
-	err := c.Limit10()
-	if err != nil {
-		return AccountBalances{}, errors.New("error conducting rate limiting: " + err.Error())
-	}
-	ts := time.Now()
-	signature := c.messageSignature("/account/balance", ts, "")
+// AccountBalanceResponse represents the JSON data structure sent to
+// the GET /account/balance endpoint.
+type AccountBalanceResponse []AccountBalanceItem
 
-	req, err := http.NewRequest("GET", fmt.Sprintf("%s/account/balance", APILocation), nil)
+// AccountBalance implements the GET /account/balance endpoint.
+func (c *Client) AccountBalance() (*AccountBalanceResponse, error) {
+	abr := &AccountBalanceResponse{}
+
+	err := c.Get("/account/balance", abr, rateLimit10)
 	if err != nil {
-		fmt.Println("error creating account balance request: " + err.Error())
-		return AccountBalances{}, errors.New("error creating account balance request: " + err.Error())
+		return nil, err
 	}
 
-	req.Header.Set("Accept", "application/json")
-	req.Header.Set("Accept-Charset", "UTF-8")
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("apikey", c.apikey)
-	req.Header.Set("timestamp", fmt.Sprintf("%d", ts.UnixNano()/int64(time.Millisecond)))
-	req.Header.Set("signature", signature)
+	return abr, nil
+}
 
-	res, err := netHTTPClient.Do(req)
-	if err != nil {
-		fmt.Println("error receiving account balance response: " + err.Error())
-		return AccountBalances{}, errors.New("error receiving account balance response: " + err.Error())
-	}
-	defer res.Body.Close()
-
-	body, err := ioutil.ReadAll(res.Body)
-	if err != nil {
-		return AccountBalances{}, errors.New("error reading account balance response body: " + err.Error())
-	}
-
-	var accbal AccountBalances
-	err = json.Unmarshal(body, &accbal)
-	if err != nil {
-		return AccountBalances{}, errors.New("error unmarshalling account balance body: " + err.Error())
-	}
-
-	return accbal, nil
+// AccountTradingFeeResponse represents the JSON data structure sent to
+// the GET /account/:instrument/:currency/tradingfee endpoint.
+type AccountTradingFeeResponse struct {
+	Success      bool        `json:"success"`
+	ErrorCode    int         `json:"errorCode"`
+	ErrorMessage string      `json:"errorMessage"`
+	TradingFee   AmountWhole `json:"tradingFeeRate"`
+	Volume30Days AmountWhole `json:"volume30Day"`
 }
 
 // AccountTradingFee implements the /account/:instrument/:currency/tradingfee endpoint.
-func (c *Client) AccountTradingFee(instrument Instrument, currency Currency) (AccountTradingFeeData, error) {
-	err := c.Limit10()
-	if err != nil {
-		return AccountTradingFeeData{}, errors.New("error conducting rate limiting: " + err.Error())
-	}
-	ts := time.Now()
-	ep := fmt.Sprintf("/account/%s/%s/tradingfee", instrument, currency)
-	signature := c.messageSignature(ep, ts, "")
+func (c *Client) AccountTradingFee(instrument Instrument, currency Currency) (*AccountTradingFeeResponse, error) {
+	atfd := &AccountTradingFeeResponse{}
 
-	req, err := http.NewRequest("GET", fmt.Sprintf("%s%s", APILocation, ep), nil)
+	err := c.Get(fmt.Sprintf("/account/%s/%s/tradingfee", instrument, currency), atfd, rateLimit10)
 	if err != nil {
-		fmt.Println("error creating account trading fee request: " + err.Error())
-		return AccountTradingFeeData{}, errors.New("error creating account trading fee request: " + err.Error())
+		return nil, err
 	}
 
-	req.Header.Set("Accept", "application/json")
-	req.Header.Set("Accept-Charset", "UTF-8")
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("apikey", c.apikey)
-	req.Header.Set("timestamp", fmt.Sprintf("%d", ts.UnixNano()/int64(time.Millisecond)))
-	req.Header.Set("signature", signature)
-
-	res, err := netHTTPClient.Do(req)
-	if err != nil {
-		fmt.Println("error receiving account trading fee response: " + err.Error())
-		return AccountTradingFeeData{}, errors.New("error receiving account trading fee response: " + err.Error())
-	}
-	defer res.Body.Close()
-
-	body, err := ioutil.ReadAll(res.Body)
-	if err != nil {
-		return AccountTradingFeeData{}, errors.New("error reading account trading fee response body: " + err.Error())
-	}
-
-	var trafee AccountTradingFeeData
-	err = json.Unmarshal(body, &trafee)
-	if err != nil {
-		return AccountTradingFeeData{}, errors.New("error unmarshalling account trading fee body: " + err.Error())
-	}
-
-	return trafee, nil
+	return atfd, nil
 }
 
-type AccountBalances []AccountBalanceData
-
-func (a AccountBalances) GetBalance(currency Currency) AmountWhole {
+// GetBalance returns the balance of the provided currency.
+func (a AccountBalanceResponse) GetBalance(currency Currency) AmountWhole {
 	for _, b := range a {
 		if b.Currency == currency {
 			return b.Balance
@@ -116,17 +61,13 @@ func (a AccountBalances) GetBalance(currency Currency) AmountWhole {
 	return AmountWhole(0)
 }
 
-type AccountBalanceData struct {
+// AccountBalanceItem is the data structure that represents currency account balance.
+type AccountBalanceItem struct {
 	Currency Currency    `json:"currency"`
 	Balance  AmountWhole `json:"balance"`
 	Pending  AmountWhole `json:"pendingFunds"`
 }
 
-func (abd *AccountBalanceData) String() string {
-	return fmt.Sprintf("%s: %f", abd.Currency, abd.Balance.ToAmountDecimal())
-}
-
-type AccountTradingFeeData struct {
-	TradingFee   AmountWhole `json:"tradingFeeRate"`
-	Volume30Days AmountWhole `json:"volume30Day"`
+func (ab *AccountBalanceItem) String() string {
+	return fmt.Sprintf("%s: %f", ab.Currency, ab.Balance.ToAmountDecimal())
 }
